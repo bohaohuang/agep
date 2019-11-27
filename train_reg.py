@@ -27,6 +27,7 @@ import mobilenet
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 learning_rate = 1e-3
 epochs = 80
+batch_size = 64
 decay_step = [60]
 decay_rate = 0.1
 verb_step = 25
@@ -139,8 +140,10 @@ def main():
         transforms.ToTensor(),
         transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
-    train_reader = DataLoader(UTKDataLoader(x_train, y_train, tsfm=transform_train), num_workers=4, shuffle=True)
-    valid_reader = DataLoader(UTKDataLoader(x_valid, y_valid, tsfm=transform_valid), num_workers=4, shuffle=True)
+    train_reader = DataLoader(UTKDataLoader(x_train, y_train, tsfm=transform_train), batch_size=batch_size,
+                              num_workers=4, shuffle=True)
+    valid_reader = DataLoader(UTKDataLoader(x_valid, y_valid, tsfm=transform_valid), batch_size=batch_size,
+                              num_workers=4, shuffle=True)
 
     # network
     # net = AgeNet(6)

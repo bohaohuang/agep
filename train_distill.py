@@ -18,9 +18,10 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 # Own modules
-import reader
 import resnet
 import mobilenet
+import raspnet
+import utils
 
 # settings
 learning_rate = 1e-3
@@ -34,34 +35,38 @@ save_epoch = 1
 save_dir = './model/dst'
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
-network_t = 'resnet'
-network_s = 'mobilenet'
-teacher_dir = './model/resnet/epoch-20.pth.tar'
+network_t = 'mobilenet'
+network_s = 'agenet'
+class_num = 6
+teacher_dir = './model/base/large/epoch-5.pth.tar'
 lambda_ = 1
 temperature = 5
 
 
-def make_network(ntwk_name):
-    if ntwk_name == 'resnet':
-        net = resnet.resnet18(True)
-        net.fc = nn.Linear(512, 2)
-    elif ntwk_name == 'mobilenet':
+def make_network(model_name, class_num):
+    if model_name == 'resnet':
+        net = resnet.resnet34(True)
+        net.fc = nn.Linear(512, class_num)
+    elif model_name == 'mobilenet':
         net = mobilenet.mobilenet_v2(True)
-        net.classifier[1] = nn.Linear(1280, 2)
+        net.classifier[1] = nn.Linear(1280, class_num)
     else:
-        raise NotImplementedError
+        net = raspnet.raspnet(name=model_name, class_num=class_num)
     return net
 
 
 def main():
+    # get data
+    x_train, y_train, x_valid, y_valid = utils.get_images(r'./data/UTKFace', resize_shape=(224, 224))
+
     # define network
-    net_t = make_network(network_t)
+    net_t = make_network(network_t, class_num)
     net_t.load_state_dict(torch.load(teacher_dir)['state_dict'])
     for param in net_t.parameters():
         param.requires_grad = False
     net_t.to(device)
 
-    net_s = make_network(network_s)
+    net_s = make_network(network_s, class_num)
     net_s.to(device)
 
     # define loss
@@ -71,23 +76,19 @@ def main():
     # define reader
     transform_train = transforms.Compose([
         transforms.ToPILImage(),
-        transforms.RandomResizedCrop((224, 224)),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     ])
     transform_valid = transforms.Compose([
         transforms.ToPILImage(),
-        transforms.CenterCrop((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     ])
-    train_reader = DataLoader(reader.UTKDataLoader(data_dir, 'train.hdf5', transforms=transform_train,
-                                                   age_thresh=age_thresh),
-                              batch_size=batch_size, shuffle=True, num_workers=4)
-    valid_reader = DataLoader(reader.UTKDataLoader(data_dir, 'valid.hdf5', transforms=transform_valid,
-                                                   age_thresh=age_thresh),
-                              batch_size=batch_size, num_workers=4)
+    train_reader = DataLoader(utils.UTKDataLoaderDistill(x_train, y_train, 32, tsfm=transform_train),
+                              batch_size=batch_size, num_workers=4, shuffle=True)
+    valid_reader = DataLoader(utils.UTKDataLoaderDistill(x_valid, y_valid, 32, tsfm=transform_valid),
+                              batch_size=batch_size, num_workers=4, shuffle=False)
 
     # train
     for epoch in range(epochs):
@@ -96,11 +97,11 @@ def main():
         dst = 0.0
         pbar = tqdm(train_reader)
         for i, data in enumerate(pbar):
-            inputs, labels = data
-            inputs, labels = inputs.float().to(device), labels.long().to(device)
+            inputs_l, inputs_s, labels = data
+            inputs_l, inputs_s, labels = inputs_l.float().to(device), inputs_s.float().to(device), labels.long().to(device)
             optimizer.zero_grad()
-            outputs_t = net_t(inputs)
-            outputs_s = net_s(inputs)
+            outputs_t = net_t(inputs_l)
+            outputs_s = net_s(inputs_s)
             loss_cls = criterion(outputs_s, labels)
             loss_dst = F.kl_div(F.log_softmax(outputs_s / temperature), F.softmax(outputs_t / temperature),
                                 reduction="batchmean")
@@ -119,15 +120,19 @@ def main():
         # validation
         correct = 0
         total = 0
+        truth = []
+        pred = []
         with torch.no_grad():
             for data in valid_reader:
-                inputs, labels = data
-                inputs, labels = inputs.float().to(device), labels.long().to(device)
-                outputs = net_s(inputs)
+                inputs_l, inputs_s, labels = data
+                inputs_l, inputs_s, labels = inputs_l.float().to(device), inputs_s.float().to(device), labels.long().to(device)
+                outputs = net_s(inputs_s)
                 _, predicted = torch.max(outputs.data, 1)
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
-        print('Epoch {}: valid accuracy: {:.2f}'.format(epoch+1, 100*correct/total))
+        p, r, f1 = utils.f1_score(truth, pred, 0)
+        print('Epoch {}: valid accuracy: {:.2f}, precision: {:.2f}, recall: {:.2f}, f1: {:.2f}'.format(
+            epoch + 1, 100 * correct / total, p, r, f1))
 
         if epoch % save_epoch == 0 and epoch != 0:
             save_name = os.path.join(save_dir, 'epoch-{}.pth.tar'.format(epoch))

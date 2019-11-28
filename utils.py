@@ -39,6 +39,11 @@ class UTKDataLoader(data.Dataset):
 
 
 class UTKDataLoaderDistill(data.Dataset):
+    """
+    TODO
+    1. read images
+    2. every time return large images and small images
+    """
     def __init__(self, img, lbl, size_s=32, tsfm=None):
         self.img = img
         self.lbl = lbl
@@ -49,13 +54,8 @@ class UTKDataLoaderDistill(data.Dataset):
         return len(self.img)
 
     def __getitem__(self, index):
-        img = self.img[index]
-        img_s = transform.resize(img, self.resize).astype(np.uint8)
-        lbl = self.lbl[index]
-        if self.transforms:
-            img = self.transforms(img)
-            img_s = self.transforms(img_s)
-        return img, img_s, torch.tensor(lbl)
+        # fill in this function
+        return
 
 
 def get_images(parent_path, age_thresh=(6, 18, 25, 35, 60), valid_percent=0.2, resize_shape=(32, 32)):

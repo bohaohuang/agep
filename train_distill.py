@@ -39,7 +39,7 @@ network_t = 'mobilenet'
 network_s = 'agenet'
 class_num = 6
 teacher_dir = './model/base/large/epoch-5.pth.tar'
-lambda_ = 1
+lambda_ = 0.2
 temperature = 5
 
 
@@ -70,25 +70,10 @@ def main():
     net_s.to(device)
 
     # define loss
-    criterion = nn.CrossEntropyLoss().to(device)
-    optimizer = optim.SGD(net_t.parameters(), lr=learning_rate, momentum=0.9)
+    # TODO
 
     # define reader
-    transform_train = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ])
-    transform_valid = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ])
-    train_reader = DataLoader(utils.UTKDataLoaderDistill(x_train, y_train, 32, tsfm=transform_train),
-                              batch_size=batch_size, num_workers=4, shuffle=True)
-    valid_reader = DataLoader(utils.UTKDataLoaderDistill(x_valid, y_valid, 32, tsfm=transform_valid),
-                              batch_size=batch_size, num_workers=4, shuffle=False)
+    # TODO
 
     # train
     for epoch in range(epochs):
@@ -97,17 +82,7 @@ def main():
         dst = 0.0
         pbar = tqdm(train_reader)
         for i, data in enumerate(pbar):
-            inputs_l, inputs_s, labels = data
-            inputs_l, inputs_s, labels = inputs_l.float().to(device), inputs_s.float().to(device), labels.long().to(device)
-            optimizer.zero_grad()
-            outputs_t = net_t(inputs_l)
-            outputs_s = net_s(inputs_s)
-            loss_cls = criterion(outputs_s, labels)
-            loss_dst = F.kl_div(F.log_softmax(outputs_s / temperature), F.softmax(outputs_t / temperature),
-                                reduction="batchmean")
-            loss = loss_cls + lambda_ * loss_dst
-            loss.backward()
-            optimizer.step()
+            # TODO train the file with distillation loss
 
             running_loss += loss.item()
             cls += loss_cls.item()

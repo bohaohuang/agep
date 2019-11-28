@@ -130,6 +130,9 @@ def main():
                 _, predicted = torch.max(outputs.data, 1)
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
+                truth.extend(labels.cpu().numpy())
+                pred.extend(predicted.cpu().numpy())
+
         p, r, f1 = utils.f1_score(truth, pred, 0)
         print('Epoch {}: valid accuracy: {:.2f}, precision: {:.2f}, recall: {:.2f}, f1: {:.2f}'.format(
             epoch + 1, 100 * correct / total, p, r, f1))

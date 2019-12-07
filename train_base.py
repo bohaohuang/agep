@@ -8,6 +8,7 @@ import os
 
 # Libs
 from tqdm import tqdm
+from tensorboardX import SummaryWriter
 
 # Pytorch
 import torch
@@ -22,7 +23,7 @@ import mobilenet, resnet, raspnet
 
 # settings
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-learning_rate = 1e-3
+learning_rate = 1e-2
 epochs = 80
 decay_step = [60]
 decay_rate = 0.1
@@ -30,15 +31,16 @@ verb_step = 25
 save_epoch = 5
 batch_size = 64
 class_num = 6
-model_type = 'large'
-model_name = 'mobilenet'
-save_dir = './model/base/{}'.format(model_type)
+model_type = 'small'
+model_name = 'agenetm'
+save_dir = './model/base/{}/{}'.format(model_type, model_name)
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 if model_type == 'large':
     resize_shape = (224, 224)
 else:
     resize_shape = (32, 32)
+writer = SummaryWriter(log_dir=save_dir)    # tensorboard writer
 
 
 def main():
@@ -74,6 +76,7 @@ def main():
             raise NotImplementedError
     else:
         net = raspnet.raspnet(name=model_name, class_num=class_num)
+    writer.add_graph(net, torch.rand(1, 3, *resize_shape))
     net.to(device)
 
     # define loss
@@ -119,6 +122,10 @@ def main():
         p, r, f1 = utils.f1_score(truth, pred, 0)
         print('Epoch {}: valid accuracy: {:.2f}, precision: {:.2f}, recall: {:.2f}, f1: {:.2f}'.format(
             epoch + 1, 100 * correct / total, p, r, f1))
+        writer.add_scalar('valid/acc', correct / total, epoch)
+        writer.add_scalar('valid/precision', p, epoch)
+        writer.add_scalar('valid/recall', r, epoch)
+        writer.add_scalar('valid/f1', f1, epoch)
 
         if epoch % save_epoch == 0 and epoch != 0:
             save_name = os.path.join(save_dir, 'epoch-{}.pth.tar'.format(epoch))
